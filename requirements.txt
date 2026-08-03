@@ -1,0 +1,11 @@
+python-dotenv
+pandas
+numpy
+scikit-learn
+transformers
+datasets
+torch
+streamlit
+requests
+assemblyai
+kagglehub
