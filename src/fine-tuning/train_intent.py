@@ -102,9 +102,12 @@ def load_data(kaggle_path: str, local_path: str):
     return Dataset.from_pandas(train_df), Dataset.from_pandas(val_df)
 
 
-def tokenize_function(examples, tokenizer):
-    """Tokenizes the text in the dataset."""
-    return tokenizer(examples["text"], truncation=True, padding="max_length", max_length=128)
+def tokenize_function(examples, tokenizer, label2id):
+    """Tokenizes text and converts string intent labels to integer IDs."""
+    result = tokenizer(examples["text"], truncation=True, padding="max_length", max_length=128)
+    if "intent" in examples:
+        result["label"] = [label2id[lbl] for lbl in examples["intent"]]
+    return result
 
 
 def main():
@@ -139,8 +142,8 @@ def main():
     id2label = {i: lbl for lbl, i in label2id.items()}
 
     tokenizer = AutoTokenizer.from_pretrained(MODEL_CONFIG["intent_base_model"])
-    train_ds = train_ds.map(lambda x: tokenize_function(x, tokenizer), batched=True)
-    val_ds = val_ds.map(lambda x: tokenize_function(x, tokenizer), batched=True)
+    train_ds = train_ds.map(lambda x: tokenize_function(x, tokenizer, label2id), batched=True)
+    val_ds = val_ds.map(lambda x: tokenize_function(x, tokenizer, label2id), batched=True)
 
     model = AutoModelForSequenceClassification.from_pretrained(
         MODEL_CONFIG["intent_base_model"],
@@ -150,7 +153,13 @@ def main():
     )
 
     # 5. Check device (CUDA vs CPU)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    if torch.cuda.is_available():
+        device = "cuda"
+    elif torch.backends.mps.is_available():
+        device = "mps"
+    else:
+        device = "cpu"
+
     print(f"Using device: {device}")
 
     # 6. Configure and run the Trainer

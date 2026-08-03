@@ -4,8 +4,11 @@ numpy
 scikit-learn
 transformers
 datasets
+accelerate
 torch
 streamlit
 requests
 assemblyai
 kagglehub
+sentencepiece
+tiktoken

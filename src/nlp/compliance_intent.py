@@ -3,10 +3,18 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
 from pathlib import Path
 
+from config.settings import MODEL_CONFIG
+
 INTENT_MODEL_DIR = Path("models/fine_tuned_intent_distilbert")
 
-_intent_tokenizer = AutoTokenizer.from_pretrained(INTENT_MODEL_DIR)
-_intent_model = AutoModelForSequenceClassification.from_pretrained(INTENT_MODEL_DIR)
+# Fallback to base model if fine-tuned model has not been trained/saved yet
+if INTENT_MODEL_DIR.exists() and (INTENT_MODEL_DIR / "config.json").exists():
+    model_path = str(INTENT_MODEL_DIR)
+else:
+    model_path = MODEL_CONFIG.get("intent_base_model", "distilbert/distilbert-base-uncased")
+
+_intent_tokenizer = AutoTokenizer.from_pretrained(model_path)
+_intent_model = AutoModelForSequenceClassification.from_pretrained(model_path)
 
 
 def _predict_intent(text: str) -> str:
