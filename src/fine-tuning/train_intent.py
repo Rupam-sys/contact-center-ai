@@ -232,7 +232,8 @@ def main():
 
     trainer.save_model(str(OUTPUT_DIR))
     tokenizer.save_pretrained(str(OUTPUT_DIR))
-    print(f"QLoRA Model and tokenizer saved to '{OUTPUT_DIR}'.")
+    base_model.config.save_pretrained(str(OUTPUT_DIR))
+    print(f"QLoRA Model, config, and tokenizer saved to '{OUTPUT_DIR}'.")
 
 
 if __name__ == "__main__":

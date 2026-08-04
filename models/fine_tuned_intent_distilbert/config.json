@@ -1,0 +1,44 @@
+{
+  "activation": "gelu",
+  "architectures": [
+    "DistilBertForMaskedLM"
+  ],
+  "attention_dropout": 0.1,
+  "bos_token_id": null,
+  "dim": 768,
+  "dropout": 0.1,
+  "dtype": "float32",
+  "eos_token_id": null,
+  "hidden_dim": 3072,
+  "id2label": {
+    "0": "account_access",
+    "1": "billing_issue",
+    "2": "cancellation",
+    "3": "complaint",
+    "4": "other",
+    "5": "refund_request",
+    "6": "technical_issue"
+  },
+  "initializer_range": 0.02,
+  "label2id": {
+    "account_access": 0,
+    "billing_issue": 1,
+    "cancellation": 2,
+    "complaint": 3,
+    "other": 4,
+    "refund_request": 5,
+    "technical_issue": 6
+  },
+  "max_position_embeddings": 512,
+  "model_type": "distilbert",
+  "n_heads": 12,
+  "n_layers": 6,
+  "pad_token_id": 0,
+  "qa_dropout": 0.1,
+  "seq_classif_dropout": 0.2,
+  "sinusoidal_pos_embds": false,
+  "tie_weights_": true,
+  "tie_word_embeddings": true,
+  "transformers_version": "5.10.2",
+  "vocab_size": 30522
+}
