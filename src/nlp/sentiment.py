@@ -19,7 +19,9 @@ LABELS = ["negative", "neutral", "positive"]  # cardiffnlp twitter-roberta mappi
 
 
 def _predict_sentiment(text: str) -> str:
-    inputs = _tokenizer(text, return_tensors="pt", truncation=True)
+    if not text or not text.strip():
+        return "neutral"
+    inputs = _tokenizer(text, return_tensors="pt", truncation=True, max_length=512)
     with torch.no_grad():
         outputs = _model(**inputs)
     scores = outputs.logits[0]

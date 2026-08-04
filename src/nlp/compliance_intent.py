@@ -7,23 +7,35 @@ from config.settings import MODEL_CONFIG
 
 INTENT_MODEL_DIR = Path("models/fine_tuned_intent_distilbert")
 
-# Fallback to base model if fine-tuned model has not been trained/saved yet
-if INTENT_MODEL_DIR.exists() and (INTENT_MODEL_DIR / "config.json").exists():
-    model_path = str(INTENT_MODEL_DIR)
+from peft import PeftModel
+
+# Fallback logic: check for QLoRA adapter, full fine-tuned model, or base model
+if INTENT_MODEL_DIR.exists() and (INTENT_MODEL_DIR / "adapter_config.json").exists():
+    _intent_tokenizer = AutoTokenizer.from_pretrained(str(INTENT_MODEL_DIR))
+    base_model_name = MODEL_CONFIG.get("intent_base_model", "distilbert/distilbert-base-uncased")
+    _base_model = AutoModelForSequenceClassification.from_pretrained(base_model_name)
+    _intent_model = PeftModel.from_pretrained(_base_model, str(INTENT_MODEL_DIR))
+elif INTENT_MODEL_DIR.exists() and (INTENT_MODEL_DIR / "config.json").exists():
+    _intent_tokenizer = AutoTokenizer.from_pretrained(str(INTENT_MODEL_DIR))
+    _intent_model = AutoModelForSequenceClassification.from_pretrained(str(INTENT_MODEL_DIR))
 else:
     model_path = MODEL_CONFIG.get("intent_base_model", "distilbert/distilbert-base-uncased")
-
-_intent_tokenizer = AutoTokenizer.from_pretrained(model_path)
-_intent_model = AutoModelForSequenceClassification.from_pretrained(model_path)
+    _intent_tokenizer = AutoTokenizer.from_pretrained(model_path)
+    _intent_model = AutoModelForSequenceClassification.from_pretrained(model_path)
 
 
 def _predict_intent(text: str) -> str:
-    inputs = _intent_tokenizer(text, return_tensors="pt", truncation=True)
+    if not text or not text.strip():
+        return "general_inquiry"
+    inputs = _intent_tokenizer(text, return_tensors="pt", truncation=True, max_length=512)
     with torch.no_grad():
         outputs = _intent_model(**inputs)
     logits = outputs.logits[0]
     label_id = int(torch.argmax(logits))
-    label = _intent_model.config.id2label[label_id]
+    if hasattr(_intent_model.config, "id2label") and _intent_model.config.id2label:
+        label = _intent_model.config.id2label.get(label_id, f"intent_{label_id}")
+    else:
+        label = f"intent_{label_id}"
     return label
 
 

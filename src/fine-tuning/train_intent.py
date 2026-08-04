@@ -15,8 +15,15 @@ from datasets import Dataset
 from transformers import (
     AutoTokenizer,
     AutoModelForSequenceClassification,
+    BitsAndBytesConfig,
     TrainingArguments,
     Trainer,
+)
+from peft import (
+    LoraConfig,
+    get_peft_model,
+    prepare_model_for_kbit_training,
+    TaskType,
 )
 
 from config.settings import MODEL_CONFIG
@@ -136,7 +143,7 @@ def main():
     # 3. Load and combine both datasets
     train_ds, val_ds = load_data(kaggle_path=kaggle_csv_path, local_path=OUTPUT_PATH)
 
-    # 4. Prepare for training
+    # 4. Prepare model and tokenizer with QLoRA quantization
     label_list = sorted(train_ds.unique("intent"))
     label2id = {lbl: i for i, lbl in enumerate(label_list)}
     id2label = {i: lbl for lbl, i in label2id.items()}
@@ -145,14 +152,7 @@ def main():
     train_ds = train_ds.map(lambda x: tokenize_function(x, tokenizer, label2id), batched=True)
     val_ds = val_ds.map(lambda x: tokenize_function(x, tokenizer, label2id), batched=True)
 
-    model = AutoModelForSequenceClassification.from_pretrained(
-        MODEL_CONFIG["intent_base_model"],
-        num_labels=len(label_list),
-        id2label=id2label,
-        label2id=label2id,
-    )
-
-    # 5. Check device (CUDA vs CPU)
+    # Check target device (CUDA vs MPS vs CPU)
     if torch.cuda.is_available():
         device = "cuda"
     elif torch.backends.mps.is_available():
@@ -162,12 +162,55 @@ def main():
 
     print(f"Using device: {device}")
 
+    model_kwargs = {
+        "num_labels": len(label_list),
+        "id2label": id2label,
+        "label2id": label2id,
+    }
+
+    if device == "mps":
+        print("Configuring QLoRA 4-bit BitsAndBytes quantization for MPS...")
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_use_double_quant=True,
+        )
+        model_kwargs["quantization_config"] = bnb_config
+
+    # PyTorch SDPA on MPS does not support dropout > 0 during training.
+    # Force eager attention implementation when running on MPS.
+    if device == "mps":
+        model_kwargs["attn_implementation"] = "eager"
+
+    base_model = AutoModelForSequenceClassification.from_pretrained(
+        MODEL_CONFIG["intent_base_model"],
+        **model_kwargs,
+    )
+
+    if device == "cuda":
+        print("Preparing quantized model for k-bit training...")
+        base_model = prepare_model_for_kbit_training(base_model)
+
+    peft_config = LoraConfig(
+        task_type=TaskType.SEQ_CLS,
+        r=16,
+        lora_alpha=32,
+        lora_dropout=0.1,
+        target_modules=["q_lin", "v_lin", "k_lin", "out_lin"],
+        bias="none",
+    )
+
+    model = get_peft_model(base_model, peft_config)
+    print("LoRA model parameters:")
+    model.print_trainable_parameters()
+
     # 6. Configure and run the Trainer
     args = TrainingArguments(
         output_dir=str(OUTPUT_DIR),
         eval_strategy="epoch",
         save_strategy="epoch",
-        learning_rate=2e-5,
+        learning_rate=2e-4,
         per_device_train_batch_size=16,
         per_device_eval_batch_size=32,
         num_train_epochs=2,
@@ -183,13 +226,13 @@ def main():
         eval_dataset=val_ds,
     )
 
-    print("Starting model training...")
+    print("Starting QLoRA model training...")
     trainer.train()
     print("Training complete.")
 
     trainer.save_model(str(OUTPUT_DIR))
     tokenizer.save_pretrained(str(OUTPUT_DIR))
-    print(f"Model and tokenizer saved to '{OUTPUT_DIR}'.")
+    print(f"QLoRA Model and tokenizer saved to '{OUTPUT_DIR}'.")
 
 
 if __name__ == "__main__":

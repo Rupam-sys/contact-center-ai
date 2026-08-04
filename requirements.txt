@@ -12,3 +12,5 @@ assemblyai
 kagglehub
 sentencepiece
 tiktoken
+peft
+librosa
